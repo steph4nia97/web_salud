@@ -5,6 +5,7 @@ require("./config/basedatos");
 
 const rutasAutenticacion = require("./rutas/autenticacionRutas");
 const rutasCitas = require("./rutas/citasRutas");
+const rutasAgenda = require("./rutas/agendaRutas");
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.get("/", (req, res) => {
 
 app.use("/api/auth", rutasAutenticacion);
 app.use("/api/citas", rutasCitas);
+app.use("/api/agenda", rutasAgenda);
 
 const PUERTO = process.env.PUERTO || 4000;
 

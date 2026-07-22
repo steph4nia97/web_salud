@@ -54,6 +54,21 @@ function obtenerHorasOcupadas(fecha) {
   });
 }
 
+function obtenerCitasActivasPorFecha(fecha) {
+  return new Promise((resolver, rechazar) => {
+    const sql = `
+      SELECT id, nombre_paciente, correo, hora, estado
+      FROM citas
+      WHERE fecha = ? AND estado != 'cancelada'
+      ORDER BY hora
+    `;
+    bd.all(sql, [fecha], (error, filas) => {
+      if (error) return rechazar(error);
+      resolver(filas);
+    });
+  });
+}
+
 function obtenerTodasLasCitas() {
   return new Promise((resolver, rechazar) => {
     const sql = `
@@ -79,10 +94,25 @@ function actualizarEstadoCita(id, estado) {
   });
 }
 
+function obtenerCitaPorId(id) {
+  return new Promise((resolver, rechazar) => {
+    const sql = `
+      SELECT id, nombre_paciente, correo, telefono, fecha, hora, motivo, estado, creado_en
+      FROM citas WHERE id = ?
+    `;
+    bd.get(sql, [id], (error, fila) => {
+      if (error) return rechazar(error);
+      resolver(fila || null);
+    });
+  });
+}
+
 module.exports = {
   crearCita,
   obtenerCitasPorFecha,
   obtenerHorasOcupadas,
+  obtenerCitasActivasPorFecha,
   obtenerTodasLasCitas,
   actualizarEstadoCita,
+  obtenerCitaPorId,
 };

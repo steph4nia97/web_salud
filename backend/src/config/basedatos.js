@@ -37,6 +37,29 @@ bd.serialize(() => {
       UNIQUE (fecha, hora)
     )
   `);
+
+  bd.run(`
+    CREATE TABLE IF NOT EXISTS dias_agenda (
+      fecha TEXT PRIMARY KEY,
+      abierto INTEGER NOT NULL CHECK (abierto IN (0, 1)),
+      hora_inicio TEXT,
+      hora_fin TEXT,
+      intervalo INTEGER
+    )
+  `);
+
+  // Migración suave si la tabla ya existía sin columnas de horario
+  bd.run(`ALTER TABLE dias_agenda ADD COLUMN hora_inicio TEXT`, () => {});
+  bd.run(`ALTER TABLE dias_agenda ADD COLUMN hora_fin TEXT`, () => {});
+  bd.run(`ALTER TABLE dias_agenda ADD COLUMN intervalo INTEGER`, () => {});
+
+  bd.run(`
+    CREATE TABLE IF NOT EXISTS horas_bloqueadas (
+      fecha TEXT NOT NULL,
+      hora TEXT NOT NULL,
+      PRIMARY KEY (fecha, hora)
+    )
+  `);
 });
 
 module.exports = bd;

@@ -1,4 +1,4 @@
-/** Horarios de atención disponibles (lun–vie). */
+/** Horarios por defecto (lun–vie) si el médico no define un rango. */
 const HORAS_ATENCION = [
   "09:00",
   "09:30",
@@ -31,8 +31,48 @@ function esFechaPasada(fechaISO) {
   return fecha < hoy;
 }
 
+function aMinutos(hora) {
+  const [h, m] = hora.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function deMinutos(total) {
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/**
+ * Genera slots desde hora_inicio hasta hora_fin (sin incluir el fin),
+ * cada `intervalo` minutos.
+ * Ej: 09:00–10:00 cada 30 → 09:00, 09:30
+ */
+function generarHorasPorRango(horaInicio, horaFin, intervalo) {
+  const inicio = aMinutos(horaInicio);
+  const fin = aMinutos(horaFin);
+  const paso = Number(intervalo);
+
+  if (
+    Number.isNaN(inicio) ||
+    Number.isNaN(fin) ||
+    !paso ||
+    paso < 5 ||
+    paso > 180 ||
+    fin <= inicio
+  ) {
+    return [];
+  }
+
+  const horas = [];
+  for (let t = inicio; t < fin; t += paso) {
+    horas.push(deMinutos(t));
+  }
+  return horas;
+}
+
 module.exports = {
   HORAS_ATENCION,
   esDiaLaborable,
   esFechaPasada,
+  generarHorasPorRango,
 };

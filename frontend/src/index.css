@@ -469,10 +469,66 @@ select {
 }
 
 .admin-page {
-  max-width: 960px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 5.5rem 1.25rem 3rem;
 }
+
+.agenda-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.9fr);
+  gap: 1.15rem;
+  align-items: start;
+  margin-bottom: 1.75rem;
+}
+
+.control-agenda {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(19, 38, 47, 0.08);
+  border-radius: 1.1rem;
+  padding: 1.15rem 1.25rem 1.25rem;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.mini-calendario-panel {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(19, 38, 47, 0.08);
+  border-radius: 1.1rem;
+  padding: 1.15rem 1.25rem 1.25rem;
+  margin-bottom: 0;
+  max-width: none;
+  min-width: 0;
+}
+
+.modo-calendario-btn {
+  width: 100%;
+  margin: 0.65rem 0 0.35rem;
+}
+
+.modo-calendario-btn.activo {
+  background: var(--teal);
+  color: #f7fbfa;
+  border: none;
+}
+
+.modo-calendario-btn.activo:hover {
+  background: var(--teal-deep);
+}
+
+.mini-cal-grid.modo-edicion {
+  outline: 2px dashed rgba(26, 107, 99, 0.35);
+  outline-offset: 4px;
+  border-radius: 0.6rem;
+  padding: 0.25rem;
+}
+
+@media (max-width: 900px) {
+  .agenda-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 
 .admin-page h1 {
   font-family: var(--font-display);
@@ -498,7 +554,8 @@ select {
   border: 1px solid rgba(19, 38, 47, 0.08);
   border-radius: 1.1rem;
   padding: 1.15rem 1.25rem 1rem;
-  margin-bottom: 1.75rem;
+  margin-top: 1.75rem;
+  margin-bottom: 0;
 }
 
 .semana-nav {
@@ -535,7 +592,7 @@ select {
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 0.55rem;
   align-items: end;
-  min-height: 11rem;
+  min-height: 7rem;
 }
 
 .dia-barra {
@@ -564,35 +621,32 @@ select {
 
 .dia-barra-track {
   width: 100%;
-  height: 7.5rem;
+  min-height: 5rem;
   display: flex;
   align-items: end;
   justify-content: center;
 }
 
-.dia-barra-fill {
-  width: 62%;
-  max-width: 2.2rem;
-  min-height: 0.55rem;
+.dia-barra-stack {
+  width: 70%;
+  max-width: 2.6rem;
   display: flex;
   flex-direction: column-reverse;
-  gap: 3px;
-  border-radius: 0.45rem 0.45rem 0.3rem 0.3rem;
-  overflow: hidden;
-  transition: height 0.35s var(--ease);
+  gap: 5px;
 }
 
-.dia-barra-segmento {
-  flex: 1 1 0;
-  min-height: 0.55rem;
-  background: linear-gradient(180deg, var(--teal-glow), var(--teal-deep));
-  border-radius: 0.25rem;
+.dia-barra-linea {
+  display: block;
+  width: 100%;
+  height: 3px;
+  background: #9fd9b0;
+  border-radius: 999px;
 }
 
 .dia-barra-vacia {
-  width: 62%;
-  max-width: 2.2rem;
-  height: 0.35rem;
+  width: 70%;
+  max-width: 2.6rem;
+  height: 3px;
   background: rgba(19, 38, 47, 0.12);
   border-radius: 999px;
 }
@@ -659,6 +713,29 @@ select {
   font-weight: 500;
 }
 
+.cita-estado {
+  text-transform: capitalize;
+  font-size: 0.92rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+}
+
+.cita-estado.estado-pendiente {
+  color: var(--ink-soft);
+  background: rgba(19, 38, 47, 0.06);
+}
+
+.cita-estado.estado-confirmada {
+  color: #1f6b4a;
+  background: #dff7e8;
+}
+
+.cita-estado.estado-cancelada {
+  color: #9b3d3d;
+  background: #fde8e8;
+}
+
 .cita-actions {
   display: flex;
   gap: 0.5rem;
@@ -669,16 +746,278 @@ select {
 @media (max-width: 700px) {
   .semana-barras {
     gap: 0.3rem;
-    min-height: 9.5rem;
+    min-height: 6rem;
   }
 
   .dia-barra-track {
-    height: 5.8rem;
+    min-height: 4rem;
+  }
+
+  .dia-barra-stack {
+    gap: 4px;
   }
 
   .semana-nav .btn {
     width: 100%;
   }
+}
+
+.control-agenda-estado {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.85rem;
+}
+
+.control-agenda-estado p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.agenda-horas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.4rem, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.rango-horario {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+  margin: 0.75rem 0 0.5rem;
+}
+
+.rango-horario label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.rango-horario input,
+.rango-horario select {
+  border: 1px solid rgba(19, 38, 47, 0.14);
+  border-radius: 0.65rem;
+  padding: 0.55rem 0.7rem;
+  background: #fff;
+  font: inherit;
+  color: var(--ink);
+  min-width: 7.5rem;
+}
+
+.hora-chip {
+  display: grid;
+  gap: 0.15rem;
+  justify-items: center;
+  border: 1px solid rgba(19, 38, 47, 0.12);
+  border-radius: 0.7rem;
+  padding: 0.55rem 0.35rem;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  transition: transform 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.hora-chip small {
+  font-size: 0.72rem;
+  opacity: 0.85;
+}
+
+.hora-chip:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.hora-chip.estado-libre {
+  border-color: #8fd4a8;
+  background: #dff7e8;
+  color: #1f6b4a;
+}
+
+.hora-chip.estado-bloqueada {
+  border-color: #e8a0a0;
+  background: #fde8e8;
+  color: #9b3d3d;
+}
+
+.hora-chip.estado-ocupada {
+  border-color: rgba(19, 38, 47, 0.18);
+  background: rgba(19, 38, 47, 0.08);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.hora-chip.estado-ocupada:hover {
+  border-color: rgba(26, 107, 99, 0.35);
+  background: rgba(26, 107, 99, 0.08);
+}
+
+.mini-cal-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0.85rem;
+  font-family: var(--font-display);
+}
+
+.mini-cal-nav .btn {
+  min-width: 2.5rem;
+  padding: 0.45rem 0.7rem;
+}
+
+.mini-cal-cabecera {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.mini-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.3rem;
+}
+
+.mini-cal-vacio {
+  aspect-ratio: 1;
+}
+
+.mini-cal-dia {
+  aspect-ratio: 1;
+  border: 1px solid transparent;
+  border-radius: 0.55rem;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.mini-cal-dia:hover {
+  transform: translateY(-1px);
+}
+
+.mini-cal-dia.abierto {
+  background: #dff7e8;
+  color: #1f6b4a;
+  border-color: #8fd4a8;
+}
+
+.mini-cal-dia.cerrado {
+  background: #fde8e8;
+  color: #9b3d3d;
+  border-color: #e8a0a0;
+}
+
+.mini-cal-dia.seleccionado {
+  box-shadow: 0 0 0 2px var(--teal);
+}
+
+.mini-cal-leyenda {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.mini-cal-leyenda .punto {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+}
+
+.mini-cal-leyenda .punto.abierto {
+  background: #5fbf84;
+}
+
+.mini-cal-leyenda .punto.cerrado {
+  background: #d66b6b;
+}
+
+.mini-cal-leyenda .punto.libre {
+  background: #5fbf84;
+}
+
+.mini-cal-leyenda .punto.bloqueada {
+  background: #d66b6b;
+}
+
+.mini-cal-leyenda .punto.ocupada {
+  background: #9aa3a8;
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(19, 38, 47, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.confirm-dialog {
+  width: min(100%, 420px);
+  background: #f7fbf9;
+  border: 1px solid rgba(19, 38, 47, 0.1);
+  border-radius: 1rem;
+  padding: 1.25rem 1.35rem;
+  box-shadow: 0 18px 40px rgba(19, 38, 47, 0.18);
+}
+
+.confirm-dialog h3 {
+  font-family: var(--font-display);
+  margin: 0 0 0.55rem;
+  font-size: 1.25rem;
+}
+
+.confirm-dialog p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  margin-top: 1.15rem;
+  flex-wrap: wrap;
+}
+
+.correo-dialog {
+  width: min(100%, 560px);
+}
+
+.correo-label {
+  display: block;
+  margin: 0.75rem 0 0.4rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.correo-textarea {
+  width: 100%;
+  border: 1px solid rgba(19, 38, 47, 0.14);
+  border-radius: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  font: inherit;
+  line-height: 1.45;
+  resize: vertical;
+  background: #fff;
+  color: var(--ink);
 }
 
 .reveal {

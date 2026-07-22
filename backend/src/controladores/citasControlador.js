@@ -1,15 +1,24 @@
 const {
   crearCita,
   obtenerCitasPorFecha,
-  obtenerHorasOcupadas,
   obtenerTodasLasCitas,
   actualizarEstadoCita,
+  obtenerCitaPorId,
+  obtenerHorasOcupadas,
 } = require("../modelos/citaModelo");
 const {
-  HORAS_ATENCION,
-  esDiaLaborable,
-  esFechaPasada,
-} = require("../config/horarios");
+  calcularDisponibilidad,
+  diaEstaAbierto,
+  obtenerHorasBaseDelDia,
+} = require("../servicios/disponibilidadServicio");
+const { esFechaPasada } = require("../config/horarios");
+const { obtenerHorasBloqueadas } = require("../modelos/agendaModelo");
+const {
+  textoConfirmacion,
+  textoCancelacion,
+  enviarCorreoCita,
+} = require("../servicios/correoServicio");
+
 
 async function consultarDisponibilidad(req, res) {
   try {
@@ -21,24 +30,8 @@ async function consultarDisponibilidad(req, res) {
         .json({ mensaje: "Debes enviar una fecha (YYYY-MM-DD)" });
     }
 
-    if (esFechaPasada(fecha)) {
-      return res.json({ fecha, horasDisponibles: [], mensaje: "Fecha pasada" });
-    }
-
-    if (!esDiaLaborable(fecha)) {
-      return res.json({
-        fecha,
-        horasDisponibles: [],
-        mensaje: "No hay atención los fines de semana",
-      });
-    }
-
-    const ocupadas = await obtenerHorasOcupadas(fecha);
-    const horasDisponibles = HORAS_ATENCION.filter(
-      (hora) => !ocupadas.includes(hora)
-    );
-
-    res.json({ fecha, horasDisponibles });
+    const resultado = await calcularDisponibilidad(fecha);
+    res.json(resultado);
   } catch (error) {
     console.error("Error en consultarDisponibilidad:", error);
     res.status(500).json({ mensaje: "Error interno del servidor" });
@@ -54,21 +47,39 @@ async function agendarCita(req, res) {
       return res.status(400).json({ mensaje: "Faltan datos de la cita" });
     }
 
-    if (esFechaPasada(fecha) || !esDiaLaborable(fecha)) {
+    if (esFechaPasada(fecha)) {
       return res
         .status(400)
         .json({ mensaje: "La fecha seleccionada no está disponible" });
     }
 
-    if (!HORAS_ATENCION.includes(hora)) {
+    const abierto = await diaEstaAbierto(fecha);
+    if (!abierto) {
+      return res
+        .status(400)
+        .json({ mensaje: "Este día no está disponible para agendar" });
+    }
+
+    const { horas: horasValidas } = await obtenerHorasBaseDelDia(fecha);
+    if (!horasValidas.includes(hora)) {
       return res.status(400).json({ mensaje: "Horario no válido" });
     }
 
-    const ocupadas = await obtenerHorasOcupadas(fecha);
+    const [ocupadas, bloqueadas] = await Promise.all([
+      obtenerHorasOcupadas(fecha),
+      obtenerHorasBloqueadas(fecha),
+    ]);
+
     if (ocupadas.includes(hora)) {
       return res
         .status(409)
         .json({ mensaje: "Ese horario ya está reservado" });
+    }
+
+    if (bloqueadas.includes(hora)) {
+      return res
+        .status(409)
+        .json({ mensaje: "Ese horario está bloqueado por el médico" });
     }
 
     const nuevaCita = await crearCita({
@@ -129,9 +140,76 @@ async function cambiarEstadoCita(req, res) {
   }
 }
 
+async function obtenerBorradorCorreo(req, res) {
+  try {
+    const cita = await obtenerCitaPorId(Number(req.params.id));
+    if (!cita) {
+      return res.status(404).json({ mensaje: "Cita no encontrada" });
+    }
+
+    const { tipo } = req.query;
+    if (!["confirmacion", "cancelacion"].includes(tipo)) {
+      return res.status(400).json({
+        mensaje: "Debes indicar tipo=confirmacion o tipo=cancelacion",
+      });
+    }
+
+    const mensaje =
+      tipo === "confirmacion"
+        ? textoConfirmacion(cita)
+        : textoCancelacion(cita);
+
+    res.json({
+      tipo,
+      para: cita.correo,
+      mensaje,
+      editable: true,
+    });
+  } catch (error) {
+    console.error("Error en obtenerBorradorCorreo:", error);
+    res.status(500).json({ mensaje: "Error interno del servidor" });
+  }
+}
+
+async function enviarCorreo(req, res) {
+  try {
+    const cita = await obtenerCitaPorId(Number(req.params.id));
+    if (!cita) {
+      return res.status(404).json({ mensaje: "Cita no encontrada" });
+    }
+
+    const { tipo, mensaje } = req.body;
+    if (!["confirmacion", "cancelacion"].includes(tipo)) {
+      return res.status(400).json({
+        mensaje: "Debes indicar tipo confirmacion o cancelacion",
+      });
+    }
+
+    const resultado = await enviarCorreoCita({
+      cita,
+      tipo,
+      mensaje,
+    });
+
+    res.json({
+      mensaje: resultado.simulado
+        ? "Correo simulado (revisa la consola del servidor). Configura SMTP para envío real."
+        : "Correo enviado correctamente",
+      ...resultado,
+    });
+  } catch (error) {
+    console.error("Error en enviarCorreo:", error);
+    res.status(500).json({
+      mensaje: error.message || "No se pudo enviar el correo",
+    });
+  }
+}
+
 module.exports = {
   consultarDisponibilidad,
   agendarCita,
   listarCitas,
   cambiarEstadoCita,
+  obtenerBorradorCorreo,
+  enviarCorreo,
 };

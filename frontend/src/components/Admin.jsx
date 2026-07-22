@@ -4,6 +4,8 @@ import {
   iniciarSesion,
   listarCitas,
 } from "../api";
+import ControlAgenda from "./ControlAgenda";
+import CorreoCitaDialog from "./CorreoCitaDialog";
 
 const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -54,9 +56,11 @@ export default function Admin() {
   const [contraseña, setContraseña] = useState("");
   const [citas, setCitas] = useState([]);
   const [error, setError] = useState("");
+  const [aviso, setAviso] = useState("");
   const [cargando, setCargando] = useState(false);
   const [semanaRef, setSemanaRef] = useState(() => inicioSemana(new Date()));
   const [diaSeleccionado, setDiaSeleccionado] = useState(() => aISO(new Date()));
+  const [correoCita, setCorreoCita] = useState(null);
 
   const diasSemana = useMemo(() => diasDeSemana(semanaRef), [semanaRef]);
 
@@ -72,11 +76,6 @@ export default function Admin() {
       };
     });
   }, [citas, diasSemana]);
-
-  const maxBarras = useMemo(() => {
-    const max = Math.max(0, ...resumenSemana.map((d) => d.total));
-    return Math.max(max, 1);
-  }, [resumenSemana]);
 
   const citasDelDia = useMemo(() => {
     return citas
@@ -227,61 +226,25 @@ export default function Admin() {
       </div>
 
       {error ? <p className="alert alert-error">{error}</p> : null}
+      {aviso ? <p className="alert alert-ok">{aviso}</p> : null}
 
-      <section className="semana-panel" aria-label="Resumen de la semana">
-        <div className="semana-nav">
-          <button className="btn btn-ghost" type="button" onClick={semanaAnterior}>
-            ← Semana anterior
-          </button>
-          <div className="semana-rango">
-            <strong>{rangoSemanaTexto}</strong>
-            <button className="btn-link" type="button" onClick={irAHoy}>
-              Ir a hoy
-            </button>
-          </div>
-          <button className="btn btn-ghost" type="button" onClick={semanaSiguiente}>
-            Semana siguiente →
-          </button>
-        </div>
+      <ControlAgenda
+        token={token}
+        fecha={diaSeleccionado}
+        onMensaje={setAviso}
+        onCambiarFecha={setDiaSeleccionado}
+        onCitasCambiadas={() => {
+          listarCitas(token)
+            .then(setCitas)
+            .catch((err) => setError(err.message));
+        }}
+      />
 
-        <div className="semana-barras" role="list">
-          {resumenSemana.map((dia) => {
-            const activo = dia.iso === diaSeleccionado;
-            const altura = `${(dia.total / maxBarras) * 100}%`;
-            return (
-              <button
-                key={dia.iso}
-                type="button"
-                role="listitem"
-                className={`dia-barra${activo ? " selected" : ""}`}
-                onClick={() => setDiaSeleccionado(dia.iso)}
-                aria-pressed={activo}
-                title={`${dia.etiqueta} ${dia.numero}: ${dia.total} cita(s)`}
-              >
-                <div className="dia-barra-track" aria-hidden="true">
-                  {dia.total === 0 ? (
-                    <span className="dia-barra-vacia" />
-                  ) : (
-                    <span className="dia-barra-fill" style={{ height: altura }}>
-                      {Array.from({ length: dia.total }, (_, i) => (
-                        <span key={i} className="dia-barra-segmento" />
-                      ))}
-                    </span>
-                  )}
-                </div>
-                <span className="dia-barra-count">{dia.total}</span>
-                <span className="dia-barra-label">{dia.etiqueta}</span>
-                <span className="dia-barra-num">{dia.numero}</span>
-              </button>
-            );
-          })}
-        </div>
-        <p className="hint">
-          Haz clic en un día para ver solo las citas de esa fecha.
-        </p>
-      </section>
-
-      <section className="detalle-dia" aria-label="Detalle del día">
+      <section
+        className="detalle-dia"
+        id="detalle-pacientes-dia"
+        aria-label="Detalle del día"
+      >
         <div className="detalle-dia-header">
           <h2>
             {formatearFechaLarga(diaSeleccionado)}
@@ -302,7 +265,9 @@ export default function Admin() {
               <li className="cita-item" key={cita.id}>
                 <header>
                   <span>{cita.hora}</span>
-                  <span style={{ textTransform: "capitalize" }}>{cita.estado}</span>
+                  <span className={`cita-estado estado-${cita.estado}`}>
+                    {cita.estado}
+                  </span>
                 </header>
                 <div>
                   <strong>{cita.nombre_paciente}</strong> · {cita.correo} ·{" "}
@@ -326,12 +291,101 @@ export default function Admin() {
                   >
                     Cancelar
                   </button>
+                  {cita.estado === "confirmada" ? (
+                    <button
+                      className="btn btn-primary"
+                      type="button"
+                      onClick={() =>
+                        setCorreoCita({ cita, tipo: "confirmacion" })
+                      }
+                    >
+                      Enviar correo confirmación
+                    </button>
+                  ) : null}
+                  {cita.estado === "cancelada" ? (
+                    <button
+                      className="btn btn-primary"
+                      type="button"
+                      onClick={() =>
+                        setCorreoCita({ cita, tipo: "cancelacion" })
+                      }
+                    >
+                      Enviar correo cancelación
+                    </button>
+                  ) : null}
                 </div>
               </li>
             ))}
           </ul>
         )}
       </section>
+
+      <section className="semana-panel" aria-label="Resumen de la semana">
+        <div className="detalle-dia-header">
+          <h2>Resumen de la semana</h2>
+          <span className="detalle-dia-badge">
+            Pacientes agendados por día
+          </span>
+        </div>
+        <div className="semana-nav">
+          <button className="btn btn-ghost" type="button" onClick={semanaAnterior}>
+            ← Semana anterior
+          </button>
+          <div className="semana-rango">
+            <strong>{rangoSemanaTexto}</strong>
+            <button className="btn-link" type="button" onClick={irAHoy}>
+              Ir a hoy
+            </button>
+          </div>
+          <button className="btn btn-ghost" type="button" onClick={semanaSiguiente}>
+            Semana siguiente →
+          </button>
+        </div>
+
+        <div className="semana-barras" role="list">
+          {resumenSemana.map((dia) => {
+            const activo = dia.iso === diaSeleccionado;
+            return (
+              <button
+                key={dia.iso}
+                type="button"
+                role="listitem"
+                className={`dia-barra${activo ? " selected" : ""}`}
+                onClick={() => setDiaSeleccionado(dia.iso)}
+                aria-pressed={activo}
+                title={`${dia.etiqueta} ${dia.numero}: ${dia.total} cita(s)`}
+              >
+                <div className="dia-barra-track" aria-hidden="true">
+                  {dia.total === 0 ? (
+                    <span className="dia-barra-vacia" />
+                  ) : (
+                    <span className="dia-barra-stack">
+                      {Array.from({ length: dia.total }, (_, i) => (
+                        <span key={i} className="dia-barra-linea" />
+                      ))}
+                    </span>
+                  )}
+                </div>
+                <span className="dia-barra-count">{dia.total}</span>
+                <span className="dia-barra-label">{dia.etiqueta}</span>
+                <span className="dia-barra-num">{dia.numero}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="hint">
+          Haz clic en un día para ver su agenda y citas.
+        </p>
+      </section>
+
+      <CorreoCitaDialog
+        abierto={Boolean(correoCita)}
+        token={token}
+        cita={correoCita?.cita || null}
+        tipo={correoCita?.tipo || "confirmacion"}
+        onCerrar={() => setCorreoCita(null)}
+        onEnviado={setAviso}
+      />
     </div>
   );
 }
