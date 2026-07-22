@@ -36,7 +36,7 @@ npm run dev
 Abre http://localhost:5173
 
 - Sitio público: biografía + formulario de agenda
-- Panel médico: http://localhost:5173/#/admin
+- Panel médico (URL privada, no aparece en el sitio): http://localhost:5173/#/panel-dr-arce
 
 ## API (resumen)
 

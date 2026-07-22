@@ -21,7 +21,8 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  if (ruta === "admin") {
+  // URL privada del médico (no aparece en el sitio público)
+  if (ruta === "panel-dr-arce") {
     return <Admin />;
   }
 

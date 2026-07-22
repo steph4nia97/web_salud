@@ -11,10 +11,6 @@ export default function Footer() {
         fabianarcetamblay@gmail.com
         <br />
         +56 9 8765 4321
-        <br />
-        <a href="#/admin" style={{ opacity: 0.7 }}>
-          Acceso médico
-        </a>
       </div>
     </footer>
   );

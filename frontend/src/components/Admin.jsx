@@ -1,19 +1,95 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   cambiarEstadoCita,
   iniciarSesion,
   listarCitas,
 } from "../api";
 
+const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+function aISO(fecha) {
+  const y = fecha.getFullYear();
+  const m = String(fecha.getMonth() + 1).padStart(2, "0");
+  const d = String(fecha.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Lunes de la semana que contiene `fecha`. */
+function inicioSemana(fecha) {
+  const d = new Date(fecha);
+  d.setHours(12, 0, 0, 0);
+  const dia = d.getDay(); // 0=domingo
+  const diff = dia === 0 ? -6 : 1 - dia;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function diasDeSemana(lunes) {
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(lunes);
+    d.setDate(lunes.getDate() + i);
+    return d;
+  });
+}
+
+function formatearFechaLarga(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const fecha = new Date(y, m - 1, d);
+  return fecha.toLocaleDateString("es-CL", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+}
+
+function esActiva(cita) {
+  return cita.estado !== "cancelada";
+}
+
 export default function Admin() {
   const [token, setToken] = useState(
     () => localStorage.getItem("medico_token") || ""
   );
-  const [correo, setCorreo] = useState("medico@consulta.local");
+  const [correo, setCorreo] = useState("");
   const [contraseña, setContraseña] = useState("");
   const [citas, setCitas] = useState([]);
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
+  const [semanaRef, setSemanaRef] = useState(() => inicioSemana(new Date()));
+  const [diaSeleccionado, setDiaSeleccionado] = useState(() => aISO(new Date()));
+
+  const diasSemana = useMemo(() => diasDeSemana(semanaRef), [semanaRef]);
+
+  const resumenSemana = useMemo(() => {
+    return diasSemana.map((dia, indice) => {
+      const iso = aISO(dia);
+      const delDia = citas.filter((c) => c.fecha === iso && esActiva(c));
+      return {
+        iso,
+        etiqueta: DIAS_SEMANA[indice],
+        numero: dia.getDate(),
+        total: delDia.length,
+      };
+    });
+  }, [citas, diasSemana]);
+
+  const maxBarras = useMemo(() => {
+    const max = Math.max(0, ...resumenSemana.map((d) => d.total));
+    return Math.max(max, 1);
+  }, [resumenSemana]);
+
+  const citasDelDia = useMemo(() => {
+    return citas
+      .filter((c) => c.fecha === diaSeleccionado)
+      .sort((a, b) => a.hora.localeCompare(b.hora));
+  }, [citas, diaSeleccionado]);
+
+  const rangoSemanaTexto = useMemo(() => {
+    const inicio = diasSemana[0];
+    const fin = diasSemana[6];
+    const opts = { day: "numeric", month: "short" };
+    return `${inicio.toLocaleDateString("es-CL", opts)} – ${fin.toLocaleDateString("es-CL", opts)}`;
+  }, [diasSemana]);
 
   useEffect(() => {
     if (!token) return undefined;
@@ -73,11 +149,29 @@ export default function Admin() {
     }
   }
 
+  function semanaAnterior() {
+    const d = new Date(semanaRef);
+    d.setDate(d.getDate() - 7);
+    setSemanaRef(d);
+  }
+
+  function semanaSiguiente() {
+    const d = new Date(semanaRef);
+    d.setDate(d.getDate() + 7);
+    setSemanaRef(d);
+  }
+
+  function irAHoy() {
+    const hoy = new Date();
+    setSemanaRef(inicioSemana(hoy));
+    setDiaSeleccionado(aISO(hoy));
+  }
+
   if (!token) {
     return (
       <div className="admin-page">
         <h1>Acceso médico</h1>
-        <p className="section-lead">Inicia sesión para ver y gestionar citas.</p>
+        <p className="section-lead">Área privada. Solo personal autorizado.</p>
         <form
           className="agenda-panel"
           style={{ maxWidth: 420, marginTop: "1.5rem" }}
@@ -117,12 +211,12 @@ export default function Admin() {
 
   return (
     <div className="admin-page">
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+      <div className="admin-top">
         <div>
-          <h1>Citas agendadas</h1>
-          <p className="section-lead">Panel privado del consultorio.</p>
+          <h1>Panel médico</h1>
+          <p className="section-lead">Resumen semanal y detalle por día.</p>
         </div>
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "start" }}>
+        <div className="admin-top-actions">
           <a className="btn btn-ghost" href="#/">
             Sitio público
           </a>
@@ -132,46 +226,112 @@ export default function Admin() {
         </div>
       </div>
 
-      {cargando ? <p className="hint">Cargando…</p> : null}
       {error ? <p className="alert alert-error">{error}</p> : null}
 
-      {!cargando && citas.length === 0 ? (
-        <p className="hint">Aún no hay citas registradas.</p>
-      ) : (
-        <ul className="cita-lista">
-          {citas.map((cita) => (
-            <li className="cita-item" key={cita.id}>
-              <header>
-                <span>
-                  {cita.fecha} · {cita.hora}
-                </span>
-                <span style={{ textTransform: "capitalize" }}>{cita.estado}</span>
-              </header>
-              <div>
-                <strong>{cita.nombre_paciente}</strong> · {cita.correo} ·{" "}
-                {cita.telefono}
-              </div>
-              {cita.motivo ? <div>Motivo: {cita.motivo}</div> : null}
-              <div className="cita-actions">
-                <button
-                  className="btn btn-ghost"
-                  type="button"
-                  onClick={() => onEstado(cita.id, "confirmada")}
-                >
-                  Confirmar
-                </button>
-                <button
-                  className="btn btn-ghost"
-                  type="button"
-                  onClick={() => onEstado(cita.id, "cancelada")}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      <section className="semana-panel" aria-label="Resumen de la semana">
+        <div className="semana-nav">
+          <button className="btn btn-ghost" type="button" onClick={semanaAnterior}>
+            ← Semana anterior
+          </button>
+          <div className="semana-rango">
+            <strong>{rangoSemanaTexto}</strong>
+            <button className="btn-link" type="button" onClick={irAHoy}>
+              Ir a hoy
+            </button>
+          </div>
+          <button className="btn btn-ghost" type="button" onClick={semanaSiguiente}>
+            Semana siguiente →
+          </button>
+        </div>
+
+        <div className="semana-barras" role="list">
+          {resumenSemana.map((dia) => {
+            const activo = dia.iso === diaSeleccionado;
+            const altura = `${(dia.total / maxBarras) * 100}%`;
+            return (
+              <button
+                key={dia.iso}
+                type="button"
+                role="listitem"
+                className={`dia-barra${activo ? " selected" : ""}`}
+                onClick={() => setDiaSeleccionado(dia.iso)}
+                aria-pressed={activo}
+                title={`${dia.etiqueta} ${dia.numero}: ${dia.total} cita(s)`}
+              >
+                <div className="dia-barra-track" aria-hidden="true">
+                  {dia.total === 0 ? (
+                    <span className="dia-barra-vacia" />
+                  ) : (
+                    <span className="dia-barra-fill" style={{ height: altura }}>
+                      {Array.from({ length: dia.total }, (_, i) => (
+                        <span key={i} className="dia-barra-segmento" />
+                      ))}
+                    </span>
+                  )}
+                </div>
+                <span className="dia-barra-count">{dia.total}</span>
+                <span className="dia-barra-label">{dia.etiqueta}</span>
+                <span className="dia-barra-num">{dia.numero}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="hint">
+          Haz clic en un día para ver solo las citas de esa fecha.
+        </p>
+      </section>
+
+      <section className="detalle-dia" aria-label="Detalle del día">
+        <div className="detalle-dia-header">
+          <h2>
+            {formatearFechaLarga(diaSeleccionado)}
+          </h2>
+          <span className="detalle-dia-badge">
+            {citasDelDia.filter(esActiva).length} activa(s) · {citasDelDia.length}{" "}
+            en total
+          </span>
+        </div>
+
+        {cargando ? <p className="hint">Cargando…</p> : null}
+
+        {!cargando && citasDelDia.length === 0 ? (
+          <p className="hint">No hay citas agendadas para este día.</p>
+        ) : (
+          <ul className="cita-lista">
+            {citasDelDia.map((cita) => (
+              <li className="cita-item" key={cita.id}>
+                <header>
+                  <span>{cita.hora}</span>
+                  <span style={{ textTransform: "capitalize" }}>{cita.estado}</span>
+                </header>
+                <div>
+                  <strong>{cita.nombre_paciente}</strong> · {cita.correo} ·{" "}
+                  {cita.telefono}
+                </div>
+                {cita.motivo ? <div>Motivo: {cita.motivo}</div> : null}
+                <div className="cita-actions">
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    onClick={() => onEstado(cita.id, "confirmada")}
+                    disabled={cita.estado === "confirmada"}
+                  >
+                    Confirmar
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    onClick={() => onEstado(cita.id, "cancelada")}
+                    disabled={cita.estado === "cancelada"}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

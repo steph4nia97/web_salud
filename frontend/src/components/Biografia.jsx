@@ -9,10 +9,7 @@ export default function Biografia() {
         <Reveal>
           <p className="section-label">Biografía</p>
           <h2 className="section-title">Cuidado ortopédico pensado en ti</h2>
-          <p className="section-lead">
-            Experiencia clínica en traumatología y un espacio donde tus dudas
-            sobre lesiones, dolor o recuperación caben sin apuro.
-          </p>
+
         </Reveal>
 
         <div className="bio-grid">
@@ -43,7 +40,7 @@ export default function Biografia() {
               </li>
               <li>
                 <strong>Atención</strong>
-                <span>Lunes a viernes · 09:00 a 18:00</span>
+                <span>Lunes a viernes · 17:30 a 20:00</span>
               </li>
             </ul>
           </Reveal>
