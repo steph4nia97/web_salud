@@ -60,6 +60,32 @@ bd.serialize(() => {
       PRIMARY KEY (fecha, hora)
     )
   `);
+
+  bd.run(`
+    CREATE TABLE IF NOT EXISTS actividad_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      usuario_id INTEGER,
+      usuario_nombre TEXT,
+      accion TEXT NOT NULL,
+      detalle TEXT NOT NULL,
+      creado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    )
+  `);
+
+  bd.run(`
+    CREATE INDEX IF NOT EXISTS idx_actividad_creado
+    ON actividad_log (creado_en)
+  `);
+
+  bd.run(`
+    CREATE TABLE IF NOT EXISTS horarios_semana (
+      dia_semana INTEGER PRIMARY KEY CHECK (dia_semana BETWEEN 1 AND 7),
+      abierto INTEGER NOT NULL CHECK (abierto IN (0, 1)),
+      hora_inicio TEXT,
+      hora_fin TEXT,
+      intervalo INTEGER
+    )
+  `);
 });
 
 module.exports = bd;

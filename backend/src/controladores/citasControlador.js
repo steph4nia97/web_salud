@@ -11,13 +11,21 @@ const {
   diaEstaAbierto,
   obtenerHorasBaseDelDia,
 } = require("../servicios/disponibilidadServicio");
-const { esFechaPasada } = require("../config/horarios");
-const { obtenerHorasBloqueadas } = require("../modelos/agendaModelo");
+const { esFechaPasada, esDiaLaborable, diaSemanaISO } = require("../config/horarios");
+const {
+  obtenerHorasBloqueadas,
+  obtenerEstadosEntre,
+  listarHorariosSemana,
+} = require("../modelos/agendaModelo");
 const {
   textoConfirmacion,
   textoCancelacion,
   enviarCorreoCita,
 } = require("../servicios/correoServicio");
+const {
+  registrarDesdeReq,
+  registrarPublica,
+} = require("../servicios/actividadServicio");
 
 
 async function consultarDisponibilidad(req, res) {
@@ -38,6 +46,81 @@ async function consultarDisponibilidad(req, res) {
   }
 }
 
+async function consultarCalendarioMes(req, res) {
+  try {
+    const anio = Number(req.query.anio);
+    const mes = Number(req.query.mes);
+
+    if (!anio || !mes || mes < 1 || mes > 12) {
+      return res
+        .status(400)
+        .json({ mensaje: "Debes enviar anio y mes (1-12)" });
+    }
+
+    const desde = `${anio}-${String(mes).padStart(2, "0")}-01`;
+    const ultimoDia = new Date(anio, mes, 0).getDate();
+    const hasta = `${anio}-${String(mes).padStart(2, "0")}-${String(ultimoDia).padStart(2, "0")}`;
+    const [overrides, listaSemana] = await Promise.all([
+      obtenerEstadosEntre(desde, hasta),
+      listarHorariosSemana(),
+    ]);
+    const mapaSemana = Object.fromEntries(
+      listaSemana.map((h) => [h.diaSemana, h.abierto])
+    );
+
+    const dias = [];
+    for (let d = 1; d <= ultimoDia; d += 1) {
+      const fecha = `${anio}-${String(mes).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const pasado = esFechaPasada(fecha);
+      let abiertoBase;
+      if (overrides[fecha] !== undefined) {
+        abiertoBase = overrides[fecha];
+      } else {
+        const ds = diaSemanaISO(fecha);
+        abiertoBase =
+          mapaSemana[ds] !== undefined
+            ? mapaSemana[ds]
+            : esDiaLaborable(fecha);
+      }
+      const abierto = !pasado && abiertoBase;
+      dias.push({
+        fecha,
+        abierto,
+        pasado,
+        disponible: abierto,
+      });
+    }
+
+    res.json({ anio, mes, dias });
+  } catch (error) {
+    console.error("Error en consultarCalendarioMes:", error);
+    res.status(500).json({ mensaje: "Error interno del servidor" });
+  }
+}
+
+function validarDatosPaciente({ nombre_paciente, correo, telefono }) {
+  const nombre = String(nombre_paciente || "").trim();
+  const correoTrim = String(correo || "").trim().toLowerCase();
+  const telefonoTrim = String(telefono || "").trim();
+
+  if (!/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$/.test(nombre)) {
+    return "El nombre solo puede contener letras y espacios";
+  }
+  if (nombre.length < 8 || nombre.length > 40) {
+    return "El nombre debe tener entre 8 y 40 letras";
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoTrim)) {
+    return "El correo no tiene un formato válido";
+  }
+
+  if (!/^\+569\d{8}$/.test(telefonoTrim)) {
+    return "El teléfono debe ser +569 seguido de 8 dígitos";
+  }
+
+  return null;
+}
+
 async function agendarCita(req, res) {
   try {
     const { nombre_paciente, correo, telefono, fecha, hora, motivo } =
@@ -45,6 +128,15 @@ async function agendarCita(req, res) {
 
     if (!nombre_paciente || !correo || !telefono || !fecha || !hora) {
       return res.status(400).json({ mensaje: "Faltan datos de la cita" });
+    }
+
+    const errorDatos = validarDatosPaciente({
+      nombre_paciente,
+      correo,
+      telefono,
+    });
+    if (errorDatos) {
+      return res.status(400).json({ mensaje: errorDatos });
     }
 
     if (esFechaPasada(fecha)) {
@@ -82,14 +174,23 @@ async function agendarCita(req, res) {
         .json({ mensaje: "Ese horario está bloqueado por el médico" });
     }
 
+    const nombreLimpio = String(nombre_paciente).trim();
+    const correoLimpio = String(correo).trim().toLowerCase();
+    const telefonoLimpio = String(telefono).trim();
+
     const nuevaCita = await crearCita({
-      nombrePaciente: nombre_paciente,
-      correo,
-      telefono,
+      nombrePaciente: nombreLimpio,
+      correo: correoLimpio,
+      telefono: telefonoLimpio,
       fecha,
       hora,
       motivo,
     });
+
+    await registrarPublica(
+      "cita_agendada",
+      `${nombreLimpio} agendó cita el ${fecha} a las ${hora}`
+    );
 
     res.status(201).json({
       mensaje: "Cita agendada correctamente",
@@ -131,6 +232,16 @@ async function cambiarEstadoCita(req, res) {
     const actualizada = await actualizarEstadoCita(Number(id), estado);
     if (!actualizada) {
       return res.status(404).json({ mensaje: "Cita no encontrada" });
+    }
+
+    if (estado === "confirmada" || estado === "cancelada") {
+      const accion =
+        estado === "confirmada" ? "cita_confirmada" : "cita_cancelada";
+      await registrarDesdeReq(
+        req,
+        accion,
+        `${actualizada.nombre_paciente} · ${actualizada.fecha} ${actualizada.hora} → ${estado}`
+      );
     }
 
     res.json({ mensaje: "Estado actualizado", cita: actualizada });
@@ -191,6 +302,12 @@ async function enviarCorreo(req, res) {
       mensaje,
     });
 
+    await registrarDesdeReq(
+      req,
+      "correo_enviado",
+      `Correo de ${tipo} a ${cita.correo} (${cita.nombre_paciente}, ${cita.fecha} ${cita.hora})`
+    );
+
     res.json({
       mensaje: resultado.simulado
         ? "Correo simulado (revisa la consola del servidor). Configura SMTP para envío real."
@@ -207,6 +324,7 @@ async function enviarCorreo(req, res) {
 
 module.exports = {
   consultarDisponibilidad,
+  consultarCalendarioMes,
   agendarCita,
   listarCitas,
   cambiarEstadoCita,

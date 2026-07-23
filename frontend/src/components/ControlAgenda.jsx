@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import {
   alternarHoraAgenda,
   cambiarEstadoCita,
+  configurarAperturaSemana,
   configurarDiaAgenda,
   configurarHorarioAgenda,
+  configurarHorarioSemana,
   obtenerConfigAgenda,
   obtenerMesAgenda,
 } from "../api";
@@ -26,11 +28,27 @@ const NOMBRES_MES = [
 
 const DIAS_CABECERA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
+const DIAS_SEMANA = [
+  { id: 1, nombre: "Lunes" },
+  { id: 2, nombre: "Martes" },
+  { id: 3, nombre: "Miércoles" },
+  { id: 4, nombre: "Jueves" },
+  { id: 5, nombre: "Viernes" },
+  { id: 6, nombre: "Sábado" },
+  { id: 7, nombre: "Domingo" },
+];
+
 const INTERVALOS = [10, 15, 20, 30, 45, 60];
 
 function partsFecha(iso) {
   const [y, m, d] = iso.split("-").map(Number);
   return { anio: y, mes: m, dia: d };
+}
+
+function diaSemanaDeFecha(iso) {
+  const { anio, mes, dia } = partsFecha(iso);
+  const js = new Date(anio, mes - 1, dia).getDay();
+  return js === 0 ? 7 : js;
 }
 
 function formatearFechaCorta(iso) {
@@ -40,6 +58,10 @@ function formatearFechaCorta(iso) {
     day: "numeric",
     month: "long",
   });
+}
+
+function nombreDia(id) {
+  return DIAS_SEMANA.find((d) => d.id === id)?.nombre || "día";
 }
 
 export default function ControlAgenda({
@@ -60,9 +82,17 @@ export default function ControlAgenda({
   const [horaInicio, setHoraInicio] = useState("09:00");
   const [horaFin, setHoraFin] = useState("18:00");
   const [intervalo, setIntervalo] = useState(30);
+  const [diaSemana, setDiaSemana] = useState(() => diaSemanaDeFecha(fecha));
+  const [semanaAbierta, setSemanaAbierta] = useState(true);
+  const [semanaInicio, setSemanaInicio] = useState("09:00");
+  const [semanaFin, setSemanaFin] = useState("18:00");
+  const [semanaIntervalo, setSemanaIntervalo] = useState(30);
   const [confirmacion, setConfirmacion] = useState(null);
   const [confirmando, setConfirmando] = useState(false);
   const [modoAbrirCerrar, setModoAbrirCerrar] = useState(false);
+  const [aperturaDiaSemana, setAperturaDiaSemana] = useState(() =>
+    diaSemanaDeFecha(fecha)
+  );
 
   useEffect(() => {
     const p = partsFecha(fecha);
@@ -84,6 +114,24 @@ export default function ControlAgenda({
           setHoraInicio(data.horario.horaInicio);
           setHoraFin(data.horario.horaFin);
           setIntervalo(data.horario.intervalo);
+        }
+        if (data.diaSemana) {
+          setDiaSemana(data.diaSemana);
+          setAperturaDiaSemana(data.diaSemana);
+        }
+        if (data.horarioSemana) {
+          setSemanaAbierta(data.horarioSemana.abierto);
+          if (data.horarioSemana.horaInicio) {
+            setSemanaInicio(data.horarioSemana.horaInicio);
+          }
+          if (data.horarioSemana.horaFin) {
+            setSemanaFin(data.horarioSemana.horaFin);
+          }
+          if (data.horarioSemana.intervalo) {
+            setSemanaIntervalo(data.horarioSemana.intervalo);
+          }
+        } else {
+          setSemanaAbierta(data.diaSemana >= 1 && data.diaSemana <= 5);
         }
       } catch (err) {
         if (!cancelado) setError(err.message);
@@ -176,6 +224,36 @@ export default function ControlAgenda({
         setDiasMes(mes.dias || []);
       }
 
+      if (confirmacion.tipo === "semana") {
+        const data = await configurarHorarioSemana(token, {
+          dia_semana: diaSemana,
+          abierto: semanaAbierta,
+          hora_inicio: semanaInicio,
+          hora_fin: semanaFin,
+          intervalo: semanaIntervalo,
+        });
+        onMensaje?.(data.mensaje);
+        const detalle = await obtenerConfigAgenda(token, fecha);
+        setConfig(detalle);
+        const mes = await obtenerMesAgenda(token, vistaAnio, vistaMes);
+        setDiasMes(mes.dias || []);
+      }
+
+      if (confirmacion.tipo === "apertura-semana") {
+        const { diaSemanaId, nuevoAbierto } = confirmacion;
+        const data = await configurarAperturaSemana(
+          token,
+          diaSemanaId,
+          nuevoAbierto
+        );
+        onMensaje?.(data.mensaje);
+        if (diaSemana === diaSemanaId) setSemanaAbierta(nuevoAbierto);
+        const detalle = await obtenerConfigAgenda(token, fecha);
+        setConfig(detalle);
+        const mes = await obtenerMesAgenda(token, vistaAnio, vistaMes);
+        setDiasMes(mes.dias || []);
+      }
+
       if (confirmacion.tipo === "hora") {
         const { hora, bloquear } = confirmacion;
         const data = await alternarHoraAgenda(token, fecha, hora, bloquear);
@@ -253,9 +331,38 @@ export default function ControlAgenda({
     e.preventDefault();
     pedirConfirmacion({
       tipo: "rango",
-      titulo: "¿Aplicar estos horarios?",
-      mensaje: `Se generarán cupos el ${formatearFechaCorta(fecha)} desde ${horaInicio} hasta ${horaFin}, cada ${intervalo} minutos. El día quedará abierto.`,
-      confirmarTexto: "Sí, aplicar",
+      titulo: "¿Aplicar horarios solo a este día?",
+      mensaje: `Se generarán cupos únicamente el ${formatearFechaCorta(fecha)} desde ${horaInicio} hasta ${horaFin}, cada ${intervalo} minutos. El día quedará abierto.`,
+      confirmarTexto: "Sí, solo este día",
+    });
+  }
+
+  function onPedirAplicarSemana(e) {
+    e.preventDefault();
+    const nombre = nombreDia(diaSemana).toLowerCase();
+    pedirConfirmacion({
+      tipo: "semana",
+      titulo: `¿Guardar horario para todos los ${nombre}?`,
+      mensaje: semanaAbierta
+        ? `Todos los ${nombre} del calendario usarán ${semanaInicio}–${semanaFin}, cada ${semanaIntervalo} min (salvo días puntuales que hayas cerrado o cambiado).`
+        : `Todos los ${nombre} quedarán cerrados por defecto en el calendario.`,
+      confirmarTexto: "Sí, aplicar a la semana",
+    });
+  }
+
+  function onPedirAperturaSemana(nuevoAbierto) {
+    const nombre = nombreDia(aperturaDiaSemana).toLowerCase();
+    pedirConfirmacion({
+      tipo: "apertura-semana",
+      diaSemanaId: aperturaDiaSemana,
+      nuevoAbierto,
+      titulo: nuevoAbierto
+        ? `¿Abrir todos los ${nombre}?`
+        : `¿Cerrar todos los ${nombre}?`,
+      mensaje: nuevoAbierto
+        ? `Todos los ${nombre} del calendario quedarán abiertos por defecto. Los días puntuales que hayas cerrado a mano se mantienen.`
+        : `Todos los ${nombre} del calendario quedarán cerrados por defecto. Los días puntuales que hayas abierto a mano se mantienen.`,
+      confirmarTexto: nuevoAbierto ? "Sí, abrir todos" : "Sí, cerrar todos",
     });
   }
 
@@ -311,7 +418,77 @@ export default function ControlAgenda({
           </span>
         </div>
 
+        <form className="rango-horario rango-semana" onSubmit={onPedirAplicarSemana}>
+          <p className="rango-titulo">Horario por día de la semana</p>
+          <label>
+            Día
+            <select
+              value={diaSemana}
+              onChange={(e) => setDiaSemana(Number(e.target.value))}
+            >
+              {DIAS_SEMANA.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Estado
+            <select
+              value={semanaAbierta ? "abierto" : "cerrado"}
+              onChange={(e) => setSemanaAbierta(e.target.value === "abierto")}
+            >
+              <option value="abierto">Abierto</option>
+              <option value="cerrado">Cerrado</option>
+            </select>
+          </label>
+          <label>
+            Desde
+            <input
+              type="time"
+              value={semanaInicio}
+              onChange={(e) => setSemanaInicio(e.target.value)}
+              required
+              disabled={!semanaAbierta}
+            />
+          </label>
+          <label>
+            Hasta
+            <input
+              type="time"
+              value={semanaFin}
+              onChange={(e) => setSemanaFin(e.target.value)}
+              required
+              disabled={!semanaAbierta}
+            />
+          </label>
+          <label>
+            Cada
+            <select
+              value={semanaIntervalo}
+              onChange={(e) => setSemanaIntervalo(Number(e.target.value))}
+              disabled={!semanaAbierta}
+            >
+              {INTERVALOS.map((min) => (
+                <option key={min} value={min}>
+                  {min} minutos
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="btn btn-primary" type="submit">
+            Guardar para todos los {nombreDia(diaSemana).toLowerCase()}
+          </button>
+        </form>
+
+        <p className="hint">
+          Esto aplica a todo el calendario. Los cambios puntuales de un día
+          específico siguen teniendo prioridad.
+        </p>
+
         <form className="rango-horario" onSubmit={onPedirAplicarRango}>
+          <p className="rango-titulo">Solo este día ({formatearFechaCorta(fecha)})</p>
           <label>
             Desde
             <input
@@ -344,7 +521,7 @@ export default function ControlAgenda({
             </select>
           </label>
           <button className="btn btn-primary" type="submit">
-            Aplicar horarios
+            Aplicar solo a este día
           </button>
         </form>
 
@@ -352,6 +529,11 @@ export default function ControlAgenda({
           <p className="hint">
             Rango activo: {config.horario.horaInicio} – {config.horario.horaFin}{" "}
             · cada {config.horario.intervalo} min
+            {config.horarioFuente === "semana"
+              ? " (plantilla semanal)"
+              : config.horarioFuente === "fecha"
+                ? " (solo este día)"
+                : " (por defecto)"}
           </p>
         ) : (
           <p className="hint">
@@ -413,6 +595,46 @@ export default function ControlAgenda({
               ? "Modo abrir/cerrar activo"
               : "Clic en un día para ver pacientes"}
           </span>
+        </div>
+
+        <div className="apertura-semana">
+          <p className="rango-titulo">Abrir/cerrar día en todo el calendario</p>
+          <div className="rango-horario apertura-semana-acciones">
+            <label>
+              Día
+              <select
+                value={aperturaDiaSemana}
+                onChange={(e) => setAperturaDiaSemana(Number(e.target.value))}
+              >
+                {DIAS_SEMANA.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="apertura-semana-botones">
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => onPedirAperturaSemana(true)}
+              >
+                Abrir {nombreDia(aperturaDiaSemana).toLowerCase()}
+              </button>
+              <button
+                className="btn btn-ghost"
+                type="button"
+                onClick={() => onPedirAperturaSemana(false)}
+              >
+                Cerrar {nombreDia(aperturaDiaSemana).toLowerCase()}
+              </button>
+            </div>
+          </div>
+          <p className="hint">
+            Afecta todos los {nombreDia(aperturaDiaSemana).toLowerCase()} del
+            calendario. Los cambios de un día puntual (con el modo de clic)
+            siguen teniendo prioridad.
+          </p>
         </div>
 
         <button

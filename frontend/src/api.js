@@ -7,6 +7,15 @@ export async function obtenerDisponibilidad(fecha) {
   return data;
 }
 
+export async function obtenerCalendarioMesPublico(anio, mes) {
+  const res = await fetch(
+    `${API}/citas/calendario-mes?anio=${anio}&mes=${mes}`
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.mensaje || "No se pudo cargar el calendario");
+  return data;
+}
+
 export async function agendarCita(payload) {
   const res = await fetch(`${API}/citas`, {
     method: "POST",
@@ -105,6 +114,54 @@ export async function configurarHorarioAgenda(
   return data;
 }
 
+export async function listarHorariosSemana(token) {
+  const res = await fetch(`${API}/agenda/semana`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.mensaje || "No se pudo cargar la semana");
+  return data;
+}
+
+export async function configurarHorarioSemana(
+  token,
+  { dia_semana, abierto, hora_inicio, hora_fin, intervalo }
+) {
+  const res = await fetch(`${API}/agenda/semana`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      dia_semana,
+      abierto,
+      hora_inicio,
+      hora_fin,
+      intervalo,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.mensaje || "No se pudo guardar el horario semanal");
+  return data;
+}
+
+export async function configurarAperturaSemana(token, dia_semana, abierto) {
+  const res = await fetch(`${API}/agenda/semana/apertura`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ dia_semana, abierto }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.mensaje || "No se pudo actualizar la apertura semanal");
+  }
+  return data;
+}
+
 export async function alternarHoraAgenda(token, fecha, hora, bloqueada) {
   const res = await fetch(`${API}/agenda/hora`, {
     method: "PUT",
@@ -140,4 +197,98 @@ export async function enviarCorreoCita(token, id, tipo, mensaje) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.mensaje || "No se pudo enviar el correo");
   return data;
+}
+
+export async function cambiarContraseña(token, contraseña_actual, contraseña_nueva) {
+  const res = await fetch(`${API}/auth/contrasena`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ contraseña_actual, contraseña_nueva }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.mensaje || "No se pudo cambiar la contraseña");
+  return data;
+}
+
+export async function obtenerPerfil(token) {
+  const res = await fetch(`${API}/auth/perfil`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.mensaje || "No se pudo cargar el perfil");
+  return data;
+}
+
+export async function actualizarPerfil(
+  token,
+  { nombre, correo, contraseña_actual, contraseña_nueva }
+) {
+  const res = await fetch(`${API}/auth/perfil`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      nombre,
+      correo,
+      contraseña_actual,
+      contraseña_nueva,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.mensaje || "No se pudo actualizar el perfil");
+  return data;
+}
+
+export async function listarHistorial(token, { anio, mes, accion } = {}) {
+  const params = new URLSearchParams();
+  if (anio) params.set("anio", String(anio));
+  if (mes) params.set("mes", String(mes));
+  if (accion) params.set("accion", accion);
+  const qs = params.toString();
+  const res = await fetch(`${API}/historial${qs ? `?${qs}` : ""}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.mensaje || "No se pudo cargar el historial");
+  return data;
+}
+
+export async function exportarHistorialExcel(
+  token,
+  anio,
+  mes,
+  { accion = "", completo = false } = {}
+) {
+  const params = new URLSearchParams();
+  if (completo) {
+    params.set("completo", "1");
+  } else {
+    params.set("anio", String(anio));
+    params.set("mes", String(mes));
+  }
+  if (accion) params.set("accion", accion);
+
+  const res = await fetch(`${API}/historial/exportar?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.mensaje || "No se pudo exportar");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = completo
+    ? `historial-completo.xlsx`
+    : `historial-${anio}-${String(mes).padStart(2, "0")}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }

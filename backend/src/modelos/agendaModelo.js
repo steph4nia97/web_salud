@@ -171,6 +171,93 @@ function obtenerEstadosEntre(desde, hasta) {
   });
 }
 
+function obtenerHorarioSemana(diaSemana) {
+  return new Promise((resolver, rechazar) => {
+    bd.get(
+      `
+      SELECT dia_semana, abierto, hora_inicio, hora_fin, intervalo
+      FROM horarios_semana WHERE dia_semana = ?
+    `,
+      [diaSemana],
+      (error, fila) => {
+        if (error) return rechazar(error);
+        if (!fila) return resolver(null);
+        resolver({
+          diaSemana: fila.dia_semana,
+          abierto: Boolean(fila.abierto),
+          horaInicio: fila.hora_inicio || null,
+          horaFin: fila.hora_fin || null,
+          intervalo: fila.intervalo || null,
+        });
+      }
+    );
+  });
+}
+
+function listarHorariosSemana() {
+  return new Promise((resolver, rechazar) => {
+    bd.all(
+      `
+      SELECT dia_semana, abierto, hora_inicio, hora_fin, intervalo
+      FROM horarios_semana
+      ORDER BY dia_semana
+    `,
+      [],
+      (error, filas) => {
+        if (error) return rechazar(error);
+        resolver(
+          (filas || []).map((fila) => ({
+            diaSemana: fila.dia_semana,
+            abierto: Boolean(fila.abierto),
+            horaInicio: fila.hora_inicio || null,
+            horaFin: fila.hora_fin || null,
+            intervalo: fila.intervalo || null,
+          }))
+        );
+      }
+    );
+  });
+}
+
+function guardarHorarioSemana({
+  diaSemana,
+  abierto,
+  horaInicio,
+  horaFin,
+  intervalo,
+}) {
+  return new Promise((resolver, rechazar) => {
+    bd.run(
+      `
+      INSERT INTO horarios_semana (dia_semana, abierto, hora_inicio, hora_fin, intervalo)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(dia_semana) DO UPDATE SET
+        abierto = excluded.abierto,
+        hora_inicio = excluded.hora_inicio,
+        hora_fin = excluded.hora_fin,
+        intervalo = excluded.intervalo
+    `,
+      [
+        diaSemana,
+        abierto ? 1 : 0,
+        horaInicio || null,
+        horaFin || null,
+        intervalo || null,
+      ],
+      function (error) {
+        if (error) return rechazar(error);
+        resolver({
+          diaSemana,
+          abierto: Boolean(abierto),
+          horaInicio: horaInicio || null,
+          horaFin: horaFin || null,
+          intervalo: intervalo || null,
+        });
+      }
+    );
+  });
+}
+
 module.exports = {
   obtenerEstadoDia,
   obtenerFilaDia,
@@ -182,4 +269,7 @@ module.exports = {
   bloquearTodasLasHoras,
   liberarTodasLasHoras,
   obtenerEstadosEntre,
+  obtenerHorarioSemana,
+  listarHorariosSemana,
+  guardarHorarioSemana,
 };

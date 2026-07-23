@@ -1,19 +1,32 @@
-const { obtenerHorasOcupadas, obtenerCitasActivasPorFecha } = require("../modelos/citaModelo");
+const {
+  obtenerHorasOcupadas,
+  obtenerCitasActivasPorFecha,
+} = require("../modelos/citaModelo");
 const {
   obtenerEstadoDia,
   obtenerFilaDia,
   obtenerHorasBloqueadas,
+  obtenerHorarioSemana,
 } = require("../modelos/agendaModelo");
 const {
   HORAS_ATENCION,
   esDiaLaborable,
+  diaSemanaISO,
   esFechaPasada,
   generarHorasPorRango,
 } = require("../config/horarios");
 
+async function plantillaSemana(fecha) {
+  return obtenerHorarioSemana(diaSemanaISO(fecha));
+}
+
 async function diaEstaAbierto(fecha) {
   const override = await obtenerEstadoDia(fecha);
   if (override !== null) return override;
+
+  const semana = await plantillaSemana(fecha);
+  if (semana) return semana.abierto;
+
   return esDiaLaborable(fecha);
 }
 
@@ -33,10 +46,32 @@ async function obtenerHorasBaseDelDia(fecha) {
           horaFin: fila.hora_fin,
           intervalo: fila.intervalo,
         },
+        fuente: "fecha",
       };
     }
   }
-  return { horas: [...HORAS_ATENCION], horario: null };
+
+  const semana = await plantillaSemana(fecha);
+  if (semana?.horaInicio && semana?.horaFin && semana?.intervalo) {
+    const generadas = generarHorasPorRango(
+      semana.horaInicio,
+      semana.horaFin,
+      semana.intervalo
+    );
+    if (generadas.length) {
+      return {
+        horas: generadas,
+        horario: {
+          horaInicio: semana.horaInicio,
+          horaFin: semana.horaFin,
+          intervalo: semana.intervalo,
+        },
+        fuente: "semana",
+      };
+    }
+  }
+
+  return { horas: [...HORAS_ATENCION], horario: null, fuente: "default" };
 }
 
 async function calcularDisponibilidad(fecha) {
@@ -82,9 +117,15 @@ async function calcularDisponibilidad(fecha) {
 async function detalleAgendaDia(fecha) {
   const abiertoPorDefecto = esDiaLaborable(fecha);
   const override = await obtenerEstadoDia(fecha);
-  const abierto = override !== null ? override : abiertoPorDefecto;
+  const semana = await plantillaSemana(fecha);
+  const abierto =
+    override !== null
+      ? override
+      : semana
+        ? semana.abierto
+        : abiertoPorDefecto;
 
-  const [{ horas: horasBase, horario }, citasActivas, bloqueadas] =
+  const [{ horas: horasBase, horario, fuente }, citasActivas, bloqueadas] =
     await Promise.all([
       obtenerHorasBaseDelDia(fecha),
       obtenerCitasActivasPorFecha(fecha),
@@ -118,6 +159,9 @@ async function detalleAgendaDia(fecha) {
     override: override !== null,
     abiertoPorDefecto,
     horario,
+    horarioFuente: fuente,
+    horarioSemana: semana,
+    diaSemana: diaSemanaISO(fecha),
     horas,
   };
 }
@@ -127,5 +171,6 @@ module.exports = {
   calcularDisponibilidad,
   detalleAgendaDia,
   obtenerHorasBaseDelDia,
+  plantillaSemana,
   HORAS_ATENCION,
 };

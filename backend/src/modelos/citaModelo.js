@@ -89,7 +89,15 @@ function actualizarEstadoCita(id, estado) {
     bd.run(sql, [estado, id], function (error) {
       if (error) return rechazar(error);
       if (this.changes === 0) return resolver(null);
-      resolver({ id, estado });
+      bd.get(
+        `SELECT id, nombre_paciente, correo, telefono, fecha, hora, motivo, estado, creado_en
+         FROM citas WHERE id = ?`,
+        [id],
+        (errGet, fila) => {
+          if (errGet) return rechazar(errGet);
+          resolver(fila || { id, estado });
+        }
+      );
     });
   });
 }

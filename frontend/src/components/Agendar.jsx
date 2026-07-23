@@ -1,25 +1,79 @@
 import { useEffect, useMemo, useState } from "react";
-import { agendarCita, obtenerDisponibilidad } from "../api";
+import {
+  agendarCita,
+  obtenerCalendarioMesPublico,
+  obtenerDisponibilidad,
+} from "../api";
 import Reveal from "./Reveal";
 
-function fechaMinima() {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
+const PREFIJO_TEL = "+569";
+const DIAS_CABECERA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const NOMBRES_MES = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+];
 
 const FORM_INICIAL = {
   nombre_paciente: "",
   correo: "",
-  telefono: "",
+  telefonoLocal: "",
   motivo: "",
 };
 
+function aISO(fecha) {
+  const y = fecha.getFullYear();
+  const m = String(fecha.getMonth() + 1).padStart(2, "0");
+  const d = String(fecha.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function soloLetrasYEspacios(valor) {
+  return valor.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]/g, "");
+}
+
+function validarNombre(nombre) {
+  const n = nombre.trim();
+  if (!/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$/.test(n)) {
+    return "El nombre solo puede contener letras y espacios";
+  }
+  if (n.length < 8 || n.length > 40) {
+    return "El nombre debe tener entre 8 y 40 caracteres";
+  }
+  return null;
+}
+
+function validarCorreo(correo) {
+  const c = correo.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c)) {
+    return "Ingresa un correo con formato válido";
+  }
+  return null;
+}
+
+function validarTelefonoLocal(local) {
+  if (!/^\d{8}$/.test(local)) {
+    return "Debes ingresar exactamente 8 números después de +569";
+  }
+  return null;
+}
+
 export default function Agendar() {
-  const minFecha = useMemo(() => fechaMinima(), []);
-  const [fecha, setFecha] = useState(minFecha);
+  const hoy = useMemo(() => new Date(), []);
+  const [vistaAnio, setVistaAnio] = useState(hoy.getFullYear());
+  const [vistaMes, setVistaMes] = useState(hoy.getMonth() + 1);
+  const [diasMes, setDiasMes] = useState([]);
+  const [cargandoMes, setCargandoMes] = useState(false);
+  const [fecha, setFecha] = useState("");
   const [hora, setHora] = useState("");
   const [horas, setHoras] = useState([]);
   const [mensajeDisp, setMensajeDisp] = useState("");
@@ -29,7 +83,78 @@ export default function Agendar() {
   const [error, setError] = useState("");
   const [exito, setExito] = useState("");
 
+  const celdasCalendario = useMemo(() => {
+    const primero = new Date(vistaAnio, vistaMes - 1, 1);
+    let offset = primero.getDay() - 1;
+    if (offset < 0) offset = 6;
+    const mapa = Object.fromEntries(diasMes.map((d) => [d.fecha, d]));
+    const total = new Date(vistaAnio, vistaMes, 0).getDate();
+    const celdas = [];
+
+    for (let i = 0; i < offset; i += 1) {
+      celdas.push({ key: `e-${i}`, vacia: true });
+    }
+
+    for (let d = 1; d <= total; d += 1) {
+      const iso = `${vistaAnio}-${String(vistaMes).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const info = mapa[iso];
+      const disponible = Boolean(info?.disponible);
+      celdas.push({
+        key: iso,
+        vacia: false,
+        fecha: iso,
+        numero: d,
+        disponible,
+        pasado: Boolean(info?.pasado),
+        seleccionado: iso === fecha,
+      });
+    }
+
+    return celdas;
+  }, [diasMes, fecha, vistaAnio, vistaMes]);
+
   useEffect(() => {
+    let cancelado = false;
+
+    async function cargarMes() {
+      setCargandoMes(true);
+      try {
+        const data = await obtenerCalendarioMesPublico(vistaAnio, vistaMes);
+        if (cancelado) return;
+        const dias = data.dias || [];
+        setDiasMes(dias);
+
+        setFecha((actual) => {
+          if (actual) {
+            const sigue = dias.find((d) => d.fecha === actual && d.disponible);
+            if (sigue) return actual;
+          }
+          const primera = dias.find((d) => d.disponible);
+          return primera?.fecha || "";
+        });
+      } catch (err) {
+        if (!cancelado) {
+          setDiasMes([]);
+          setError(err.message);
+        }
+      } finally {
+        if (!cancelado) setCargandoMes(false);
+      }
+    }
+
+    cargarMes();
+    return () => {
+      cancelado = true;
+    };
+  }, [vistaAnio, vistaMes]);
+
+  useEffect(() => {
+    if (!fecha) {
+      setHoras([]);
+      setMensajeDisp("Selecciona un día disponible en el calendario.");
+      return undefined;
+    }
+
     let cancelado = false;
 
     async function cargar() {
@@ -57,9 +182,40 @@ export default function Agendar() {
     };
   }, [fecha]);
 
-  function onChange(e) {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+  function mesAnterior() {
+    if (vistaMes === 1) {
+      setVistaMes(12);
+      setVistaAnio((a) => a - 1);
+    } else {
+      setVistaMes((m) => m - 1);
+    }
+  }
+
+  function mesSiguiente() {
+    if (vistaMes === 12) {
+      setVistaMes(1);
+      setVistaAnio((a) => a + 1);
+    } else {
+      setVistaMes((m) => m + 1);
+    }
+  }
+
+  function onChangeNombre(e) {
+    const value = soloLetrasYEspacios(e.target.value).slice(0, 40);
+    setForm((prev) => ({ ...prev, nombre_paciente: value }));
+  }
+
+  function onChangeCorreo(e) {
+    setForm((prev) => ({ ...prev, correo: e.target.value }));
+  }
+
+  function onChangeTelefono(e) {
+    const soloDigitos = e.target.value.replace(/\D/g, "").slice(0, 8);
+    setForm((prev) => ({ ...prev, telefonoLocal: soloDigitos }));
+  }
+
+  function onChangeMotivo(e) {
+    setForm((prev) => ({ ...prev, motivo: e.target.value }));
   }
 
   async function onSubmit(e) {
@@ -67,27 +223,51 @@ export default function Agendar() {
     setError("");
     setExito("");
 
+    if (!fecha) {
+      setError("Selecciona un día disponible");
+      return;
+    }
     if (!hora) {
       setError("Selecciona un horario disponible");
       return;
     }
 
+    const errNombre = validarNombre(form.nombre_paciente);
+    if (errNombre) {
+      setError(errNombre);
+      return;
+    }
+    const errCorreo = validarCorreo(form.correo);
+    if (errCorreo) {
+      setError(errCorreo);
+      return;
+    }
+    const errTel = validarTelefonoLocal(form.telefonoLocal);
+    if (errTel) {
+      setError(errTel);
+      return;
+    }
+
+    const telefono = `${PREFIJO_TEL}${form.telefonoLocal}`;
+
     setEnviando(true);
     try {
-      const data = await agendarCita({
-        ...form,
+      await agendarCita({
+        nombre_paciente: form.nombre_paciente.trim(),
+        correo: form.correo.trim(),
+        telefono,
+        motivo: form.motivo,
         fecha,
         hora,
       });
       setExito(
-        `Listo. Tu cita quedó para el ${fecha} a las ${hora}. Te contactaremos a ${form.correo}.`
+        `Listo. Tu cita quedó para el ${fecha} a las ${hora}. Te contactaremos a ${form.correo.trim()}.`
       );
       setForm(FORM_INICIAL);
       setHora("");
       const actualizada = await obtenerDisponibilidad(fecha);
       setHoras(actualizada.horasDisponibles || []);
       setMensajeDisp(actualizada.mensaje || "");
-      void data;
     } catch (err) {
       setError(err.message);
     } finally {
@@ -108,20 +288,72 @@ export default function Agendar() {
         </Reveal>
 
         <Reveal>
-          <form className="agenda-shell" onSubmit={onSubmit}>
+          <form className="agenda-shell" onSubmit={onSubmit} noValidate>
             <div className="agenda-panel">
               <h3>Fecha y horario</h3>
-              <div className="field">
-                <label htmlFor="fecha">Fecha</label>
-                <input
-                  id="fecha"
-                  type="date"
-                  min={minFecha}
-                  value={fecha}
-                  onChange={(e) => setFecha(e.target.value)}
-                  required
-                />
+
+              <div className="agenda-mini-cal" aria-label="Calendario de citas">
+                <div className="mini-cal-nav">
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    onClick={mesAnterior}
+                  >
+                    ←
+                  </button>
+                  <strong>
+                    {NOMBRES_MES[vistaMes - 1]} {vistaAnio}
+                  </strong>
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    onClick={mesSiguiente}
+                  >
+                    →
+                  </button>
+                </div>
+
+                <div className="mini-cal-cabecera">
+                  {DIAS_CABECERA.map((d) => (
+                    <span key={d}>{d}</span>
+                  ))}
+                </div>
+
+                {cargandoMes ? <p className="hint">Cargando mes…</p> : null}
+
+                <div className="mini-cal-grid">
+                  {celdasCalendario.map((celda) =>
+                    celda.vacia ? (
+                      <span key={celda.key} className="mini-cal-vacio" />
+                    ) : (
+                      <button
+                        key={celda.key}
+                        type="button"
+                        className={`mini-cal-dia${
+                          celda.disponible ? " abierto" : " deshabilitado"
+                        }${celda.seleccionado ? " seleccionado" : ""}`}
+                        disabled={!celda.disponible}
+                        onClick={() => setFecha(celda.fecha)}
+                        title={
+                          celda.disponible
+                            ? "Seleccionar este día"
+                            : celda.pasado
+                              ? "Fecha pasada"
+                              : "Día sin atención"
+                        }
+                      >
+                        {celda.numero}
+                      </button>
+                    )
+                  )}
+                </div>
               </div>
+
+              {fecha ? (
+                <p className="hint agenda-fecha-elegida">
+                  Día seleccionado: <strong>{fecha}</strong>
+                </p>
+              ) : null}
 
               {cargandoHoras ? (
                 <p className="hint">Cargando horarios…</p>
@@ -130,7 +362,11 @@ export default function Agendar() {
                   {mensajeDisp || "No hay horarios disponibles para esta fecha."}
                 </p>
               ) : (
-                <div className="slots" role="group" aria-label="Horarios disponibles">
+                <div
+                  className="slots"
+                  role="group"
+                  aria-label="Horarios disponibles"
+                >
                   {horas.map((h) => (
                     <button
                       key={h}
@@ -149,14 +385,18 @@ export default function Agendar() {
             <div className="agenda-panel">
               <h3>Tus datos</h3>
               <div className="field">
-                <label htmlFor="nombre_paciente">Nombre completo</label>
+                <label htmlFor="nombre_paciente">Nombre Completo</label>
                 <input
                   id="nombre_paciente"
                   name="nombre_paciente"
                   value={form.nombre_paciente}
-                  onChange={onChange}
+                  onChange={onChangeNombre}
                   required
+                  minLength={8}
+                  maxLength={40}
+                  pattern="[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*"
                   autoComplete="name"
+                  placeholder="Ej. María José Pérez"
                 />
               </div>
               <div className="field">
@@ -166,23 +406,33 @@ export default function Agendar() {
                   name="correo"
                   type="email"
                   value={form.correo}
-                  onChange={onChange}
+                  onChange={onChangeCorreo}
                   required
                   autoComplete="email"
+                  placeholder="nombre@correo.com"
                 />
               </div>
               <div className="field">
                 <label htmlFor="telefono">Teléfono</label>
-                <input
-                  id="telefono"
-                  name="telefono"
-                  type="tel"
-                  value={form.telefono}
-                  onChange={onChange}
-                  required
-                  autoComplete="tel"
-                  placeholder="+56 9 1234 5678"
-                />
+                <div className="telefono-con-prefijo">
+                  <span className="telefono-prefijo" aria-hidden="true">
+                    {PREFIJO_TEL}
+                  </span>
+                  <input
+                    id="telefono"
+                    name="telefono"
+                    type="tel"
+                    inputMode="numeric"
+                    value={form.telefonoLocal}
+                    onChange={onChangeTelefono}
+                    required
+                    minLength={8}
+                    maxLength={8}
+                    pattern="\d{8}"
+                    autoComplete="tel-national"
+                    placeholder="12345678"
+                  />
+                </div>
               </div>
               <div className="field">
                 <label htmlFor="motivo">Motivo (opcional)</label>
@@ -191,15 +441,15 @@ export default function Agendar() {
                   name="motivo"
                   rows={3}
                   value={form.motivo}
-                  onChange={onChange}
-                  placeholder="Ej. control de presión, revisión de exámenes…"
+                  onChange={onChangeMotivo}
+                  placeholder="(Control, Revisión de examenes, Primera Consulta)"
                 />
               </div>
 
               <button
                 className="btn btn-primary"
                 type="submit"
-                disabled={enviando || !hora}
+                disabled={enviando || !hora || !fecha}
               >
                 {enviando ? "Agendando…" : "Confirmar cita"}
               </button>

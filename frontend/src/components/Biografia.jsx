@@ -28,7 +28,7 @@ export default function Biografia() {
             <ul className="bio-meta">
               <li>
                 <strong>Especialidad</strong>
-                <span>Traumatología</span>
+                <span>Traumatología y Ortopedia</span>
               </li>
               <li>
                 <strong>Enfoque</strong>

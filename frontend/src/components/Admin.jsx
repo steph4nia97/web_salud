@@ -4,8 +4,11 @@ import {
   iniciarSesion,
   listarCitas,
 } from "../api";
+import EditarPerfilDialog from "./EditarPerfilDialog";
 import ControlAgenda from "./ControlAgenda";
 import CorreoCitaDialog from "./CorreoCitaDialog";
+import HistorialVentana from "./HistorialVentana";
+import MenuHamburguesa from "./MenuHamburguesa";
 
 const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -61,6 +64,8 @@ export default function Admin() {
   const [semanaRef, setSemanaRef] = useState(() => inicioSemana(new Date()));
   const [diaSeleccionado, setDiaSeleccionado] = useState(() => aISO(new Date()));
   const [correoCita, setCorreoCita] = useState(null);
+  const [menuPerfil, setMenuPerfil] = useState(false);
+  const [menuHistorial, setMenuHistorial] = useState(false);
 
   const diasSemana = useMemo(() => diasDeSemana(semanaRef), [semanaRef]);
 
@@ -219,9 +224,11 @@ export default function Admin() {
           <a className="btn btn-ghost" href="#/">
             Sitio público
           </a>
-          <button className="btn btn-ghost" type="button" onClick={cerrarSesion}>
-            Cerrar sesión
-          </button>
+          <MenuHamburguesa
+            onEditarPerfil={() => setMenuPerfil(true)}
+            onHistorial={() => setMenuHistorial(true)}
+            onCerrarSesion={cerrarSesion}
+          />
         </div>
       </div>
 
@@ -385,6 +392,19 @@ export default function Admin() {
         tipo={correoCita?.tipo || "confirmacion"}
         onCerrar={() => setCorreoCita(null)}
         onEnviado={setAviso}
+      />
+
+      <EditarPerfilDialog
+        abierto={menuPerfil}
+        token={token}
+        onCerrar={() => setMenuPerfil(false)}
+        onOk={setAviso}
+      />
+
+      <HistorialVentana
+        abierto={menuHistorial}
+        token={token}
+        onCerrar={() => setMenuHistorial(false)}
       />
     </div>
   );

@@ -23,6 +23,13 @@ function esDiaLaborable(fechaISO) {
   return diaSemana >= 1 && diaSemana <= 5;
 }
 
+/** 1=Lunes … 7=Domingo */
+function diaSemanaISO(fechaISO) {
+  const [anio, mes, dia] = fechaISO.split("-").map(Number);
+  const js = new Date(anio, mes - 1, dia).getDay();
+  return js === 0 ? 7 : js;
+}
+
 function esFechaPasada(fechaISO) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
@@ -73,6 +80,7 @@ function generarHorasPorRango(horaInicio, horaFin, intervalo) {
 module.exports = {
   HORAS_ATENCION,
   esDiaLaborable,
+  diaSemanaISO,
   esFechaPasada,
   generarHorasPorRango,
 };

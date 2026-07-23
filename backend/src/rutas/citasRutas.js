@@ -1,6 +1,7 @@
 const express = require("express");
 const {
   consultarDisponibilidad,
+  consultarCalendarioMes,
   agendarCita,
   listarCitas,
   cambiarEstadoCita,
@@ -13,6 +14,7 @@ const enrutador = express.Router();
 
 // Público: pacientes agendan desde la web
 enrutador.get("/disponibilidad", consultarDisponibilidad);
+enrutador.get("/calendario-mes", consultarCalendarioMes);
 enrutador.post("/", agendarCita);
 
 // Privado: panel del médico/admin
